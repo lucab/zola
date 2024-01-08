@@ -89,9 +89,7 @@ pub struct Page {
 }
 
 impl Page {
-    pub fn new<P: AsRef<Path>>(file_path: P, meta: PageFrontMatter, base_path: &Path) -> Page {
-        let file_path = file_path.as_ref();
-
+    pub fn new(file_path: PathBuf, meta: PageFrontMatter, base_path: &Path) -> Page {
         Page { file: FileInfo::new_page(file_path, base_path), meta, ..Self::default() }
     }
 
@@ -99,12 +97,12 @@ impl Page {
     /// Files without front matter or with invalid front matter are considered
     /// erroneous
     pub fn parse(
-        file_path: &Path,
+        file_path: PathBuf,
         content: &str,
         config: &Config,
         base_path: &Path,
     ) -> Result<Page> {
-        let (meta, content) = split_page_content(file_path, content)?;
+        let (meta, content) = split_page_content(&file_path, content)?;
         let mut page = Page::new(file_path, meta, base_path);
 
         page.lang =
@@ -191,13 +189,12 @@ impl Page {
     pub fn find_language(&mut self) {}
 
     /// Read and parse a .md file into a Page struct
-    pub fn from_file<P: AsRef<Path>>(path: P, config: &Config, base_path: &Path) -> Result<Page> {
-        let path = path.as_ref();
-        let content = read_file(path)?;
+    pub fn from_file(path: PathBuf, config: &Config, base_path: &Path) -> Result<Page> {
+        let content = read_file(&path)?;
         let mut page = Page::parse(path, &content, config, base_path)?;
 
         if page.file.name == "index" {
-            let parent_dir = path.parent().unwrap();
+            let parent_dir = page.file.path.parent().unwrap();
             page.assets = find_related_assets(parent_dir, config, true);
             page.serialized_assets = page.serialize_assets(base_path);
         } else {

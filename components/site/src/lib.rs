@@ -190,7 +190,7 @@ impl Site {
                 Some(Err(_)) => continue,
                 Some(Ok(entry)) => entry,
             };
-            let path = entry.path();
+            let path = entry.into_path();
             let file_name = match path.file_name() {
                 None => continue,
                 Some(name) => name.to_str().unwrap(),
@@ -199,7 +199,7 @@ impl Site {
             // ignore excluded content
             match &self.config.ignored_content_globset {
                 Some(gs) => {
-                    if gs.is_match(path) {
+                    if gs.is_match(&path) {
                         continue;
                     }
                 }
@@ -493,7 +493,7 @@ impl Site {
     /// Adds a page to the site and render it
     /// Only used in `zola serve --fast`
     pub fn add_and_render_page(&mut self, path: &Path) -> Result<()> {
-        let page = Page::from_file(path, &self.config, &self.base_path)?;
+        let page = Page::from_file(path.to_path_buf(), &self.config, &self.base_path)?;
         self.add_page(page, true)?;
         self.populate_sections();
         self.populate_taxonomies()?;

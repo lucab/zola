@@ -230,11 +230,11 @@ impl Library {
         // The first time to build up the list of ancestors for each section
         for (path, section) in &self.sections {
             sections_weight.insert(path.clone(), section.meta.weight);
-            if let Some(ref grand_parent) = section.file.grand_parent {
+            if let Some(grand_parent) = section.file.grand_parent() {
                 subsections
                     // Using the original filename to work for multi-lingual sections
                     .entry(grand_parent.join(&section.file.filename))
-                    .or_insert_with(Vec::new)
+                    .or_insert_with(|| Vec::with_capacity(1))
                     .push(section.file.path.clone());
             }
 
@@ -431,7 +431,7 @@ mod tests {
     fn create_page(file_path: &str, lang: &str, page_sort: PageSort) -> Page {
         let mut page = Page::default();
         page.lang = lang.to_owned();
-        page.file = FileInfo::new_page(Path::new(file_path), &PathBuf::new());
+        page.file = FileInfo::new_page(Path::new(file_path).to_path_buf(), &PathBuf::new());
         match page_sort {
             PageSort::None => (),
             PageSort::Date(date) => {

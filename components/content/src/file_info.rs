@@ -42,8 +42,6 @@ pub struct FileInfo {
     pub colocated_path: Option<String>,
     /// Path of the directory containing the .md file
     pub parent: PathBuf,
-    /// Path of the grand parent directory for that file. Only used in sections to find subsections.
-    pub grand_parent: Option<PathBuf>,
     /// The folder names to this section file, starting from the `content` directory
     /// For example a file at content/kb/solutions/blabla.md will have 2 components:
     /// `kb` and `solutions`
@@ -51,13 +49,14 @@ pub struct FileInfo {
     /// This is `parent` + `name`, used to find content referring to the same content but in
     /// various languages.
     pub canonical: PathBuf,
+    /// Whether the file is a page (otherwise it's a section).
+    pub is_page: bool,
 }
 
 impl FileInfo {
-    pub fn new_page(path: &Path, base_path: &Path) -> FileInfo {
-        let file_path = path.to_path_buf();
+    pub fn new_page(file_path: PathBuf, base_path: &Path) -> FileInfo {
         let mut parent = file_path.parent().expect("Get parent of page").to_path_buf();
-        let name = path.file_stem().unwrap().to_string_lossy().to_string();
+        let name = file_path.file_stem().unwrap().to_string_lossy().to_string();
         let canonical = parent.join(&name);
         let mut components =
             find_content_components(file_path.strip_prefix(base_path).unwrap_or(&file_path));
@@ -86,14 +85,14 @@ impl FileInfo {
         FileInfo {
             filename: file_path.file_name().unwrap().to_string_lossy().to_string(),
             path: file_path,
-            // We don't care about grand parent for pages
-            grand_parent: None,
             canonical,
             parent,
             name,
             components,
             relative,
             colocated_path,
+            // We don't care about grand parent for pages
+            is_page: true,
         }
     }
 
@@ -108,18 +107,17 @@ impl FileInfo {
         } else {
             format!("{}.md", name)
         };
-        let grand_parent = parent.parent().map(|p| p.to_path_buf());
 
         FileInfo {
             filename: file_path.file_name().unwrap().to_string_lossy().to_string(),
             path: file_path,
             canonical: parent.join(&name),
             parent,
-            grand_parent,
             name,
             components,
             relative,
             colocated_path: None,
+            is_page: false,
         }
     }
 
@@ -161,6 +159,15 @@ impl FileInfo {
 
         Ok(lang)
     }
+
+    /// Path of the grand parent directory for that file. Only used in sections to find subsections.
+    pub fn grand_parent(&self) -> Option<&Path> {
+        if self.is_page {
+            None
+        } else {
+            self.parent.parent()
+        }
+    }
 }
 
 #[cfg(test)]
@@ -179,7 +186,8 @@ mod tests {
     #[test]
     fn can_find_components_in_page_with_assets() {
         let file = FileInfo::new_page(
-            Path::new("/home/vincent/code/site/content/posts/tutorials/python/index.md"),
+            Path::new("/home/vincent/code/site/content/posts/tutorials/python/index.md")
+                .to_path_buf(),
             &PathBuf::new(),
         );
         assert_eq!(file.components, ["posts".to_string(), "tutorials".to_string()]);
@@ -189,7 +197,8 @@ mod tests {
     #[test]
     fn doesnt_fail_with_multiple_content_directories_in_path() {
         let file = FileInfo::new_page(
-            Path::new("/home/vincent/code/content/site/content/posts/tutorials/python/index.md"),
+            Path::new("/home/vincent/code/content/site/content/posts/tutorials/python/index.md")
+                .to_path_buf(),
             &PathBuf::from("/home/vincent/code/content/site"),
         );
         assert_eq!(file.components, ["posts".to_string(), "tutorials".to_string()]);
@@ -198,7 +207,7 @@ mod tests {
     #[test]
     fn can_find_valid_language_in_page() {
         let mut file = FileInfo::new_page(
-            Path::new("/home/vincent/code/site/content/posts/tutorials/python.fr.md"),
+            Path::new("/home/vincent/code/site/content/posts/tutorials/python.fr.md").to_path_buf(),
             &PathBuf::new(),
         );
         let res = file.find_language("en", &["fr"]);
@@ -209,7 +218,7 @@ mod tests {
     #[test]
     fn can_find_valid_language_with_default_locale() {
         let mut file = FileInfo::new_page(
-            Path::new("/home/vincent/code/site/content/posts/tutorials/python.en.md"),
+            Path::new("/home/vincent/code/site/content/posts/tutorials/python.en.md").to_path_buf(),
             &PathBuf::new(),
         );
         let res = file.find_language("en", &["fr"]);
@@ -220,7 +229,8 @@ mod tests {
     #[test]
     fn can_find_valid_language_in_page_with_assets() {
         let mut file = FileInfo::new_page(
-            Path::new("/home/vincent/code/site/content/posts/tutorials/python/index.fr.md"),
+            Path::new("/home/vincent/code/site/content/posts/tutorials/python/index.fr.md")
+                .to_path_buf(),
             &PathBuf::new(),
         );
         assert_eq!(file.components, ["posts".to_string(), "tutorials".to_string()]);
@@ -233,7 +243,7 @@ mod tests {
     #[test]
     fn do_nothing_on_unknown_language_in_page_with_i18n_off() {
         let mut file = FileInfo::new_page(
-            Path::new("/home/vincent/code/site/content/posts/tutorials/python.fr.md"),
+            Path::new("/home/vincent/code/site/content/posts/tutorials/python.fr.md").to_path_buf(),
             &PathBuf::new(),
         );
         let res = file.find_language("en", &[]);
@@ -244,7 +254,7 @@ mod tests {
     #[test]
     fn errors_on_unknown_language_in_page_with_i18n_on() {
         let mut file = FileInfo::new_page(
-            Path::new("/home/vincent/code/site/content/posts/tutorials/python.fr.md"),
+            Path::new("/home/vincent/code/site/content/posts/tutorials/python.fr.md").to_path_buf(),
             &PathBuf::new(),
         );
         let res = file.find_language("en", &["it"]);
@@ -266,7 +276,8 @@ mod tests {
     #[test]
     fn correct_canonical_for_index() {
         let file = FileInfo::new_page(
-            Path::new("/home/vincent/code/site/content/posts/tutorials/python/index.md"),
+            Path::new("/home/vincent/code/site/content/posts/tutorials/python/index.md")
+                .to_path_buf(),
             &PathBuf::new(),
         );
         assert_eq!(
@@ -279,7 +290,8 @@ mod tests {
     #[test]
     fn correct_canonical_after_find_language() {
         let mut file = FileInfo::new_page(
-            Path::new("/home/vincent/code/site/content/posts/tutorials/python/index.fr.md"),
+            Path::new("/home/vincent/code/site/content/posts/tutorials/python/index.fr.md")
+                .to_path_buf(),
             &PathBuf::new(),
         );
         let res = file.find_language("en", &["fr"]);
